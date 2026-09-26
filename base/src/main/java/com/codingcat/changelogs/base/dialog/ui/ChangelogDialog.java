@@ -12,6 +12,7 @@ import com.codingcat.changelogs.platformapi.player.IPlayer;
 import com.github.retrooper.packetevents.protocol.dialog.CommonDialogData;
 import com.github.retrooper.packetevents.protocol.dialog.Dialog;
 import com.github.retrooper.packetevents.protocol.dialog.DialogAction;
+import com.github.retrooper.packetevents.protocol.dialog.MultiActionDialog;
 import com.github.retrooper.packetevents.protocol.dialog.NoticeDialog;
 import com.github.retrooper.packetevents.protocol.dialog.body.DialogBody;
 import com.github.retrooper.packetevents.protocol.dialog.body.ItemDialogBody;
@@ -76,11 +77,17 @@ public class ChangelogDialog implements IDialog {
                 null, true, false,
                 canManage ? DialogAction.NONE : DialogAction.CLOSE, body, List.of()
         );
-        ActionButton button = new ActionButton(new CommonButtonData(
+        ActionButton readAllButton = new ActionButton(new CommonButtonData(
+                translatableManual(p, "dialog.changelog.button.read_all"),
+                null, 100
+        ), sessionManager.createStaticAction(this, "confirm_read"));
+        ActionButton closeButton = new ActionButton(new CommonButtonData(
                 translatableManual(p, "dialog.changelog.button.close"),
                 null, 60
-        ), sessionManager.createStaticAction(this, "confirm_read"));
-        return new NoticeDialog(common, button);
+        ), sessionManager.createStaticAction(this, "close"));
+        boolean hasUnreadEntries = this.storage.listEntries().stream().anyMatch(e -> !e.hasRead(p));
+        if (!hasUnreadEntries) return new NoticeDialog(common, closeButton);
+        return new MultiActionDialog(common, List.of(readAllButton), closeButton, 1);
     }
 
     private @NotNull Component formatEntry(@NotNull ChangelogEntry entry, @NotNull IPlayer player, @NotNull DialogSessionManager sessionManager, boolean canManage) {
@@ -134,6 +141,12 @@ public class ChangelogDialog implements IDialog {
                     if (!uids.isEmpty())
                         source.asAudience().sendMessage(translatable("dialog.changelog.read", text(uids.size())));
                 }
+                case "close" -> {
+                    if (canManage) {
+                        sessionManager.endSession(source);
+                        DialogPackets.clearDialog(source, DialogPackets.PacketPhase.PLAY);
+                    }
+                }
                 case "reopen" -> {
                     if (canManage) this.showTo(source, sessionManager, DialogPackets.PacketPhase.PLAY);
                 }
@@ -166,7 +179,7 @@ public class ChangelogDialog implements IDialog {
             }
         } finally {
             // Ensure the player is able to continue gameplay even if any exceptions occur
-            if (action.equals("confirm_read")) sessionManager.unfreeze(source);
+            if (action.equals("confirm_read") || action.equals("close")) sessionManager.unfreeze(source);
         }
     }
 
